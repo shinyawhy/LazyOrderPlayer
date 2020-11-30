@@ -143,6 +143,7 @@ OrderPlayerWindow::OrderPlayerWindow(QWidget *parent)
     bool showDesktopLyric = settings.value("music/desktopLyric", false).toBool();
     if (showDesktopLyric)
     {
+        qDebug()<<"test";
         desktopLyric->show();
         ui->desktopLyricButton->setIcon(QIcon(":/icons/lyric_show"));
     }
