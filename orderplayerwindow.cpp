@@ -4,10 +4,12 @@
 OrderPlayerWindow::OrderPlayerWindow(QWidget *parent)
     : QMainWindow(parent),
       ui(new Ui::OrderPlayerWindow),
-      settings("musics.ini", QSettings::Format::IniFormat),
-      musicsFileDir("musics"),
+      settings(QApplication::applicationDirPath()+"/musics.ini", QSettings::Format::IniFormat),
+      musicsFileDir(QApplication::applicationDirPath()+"/musics"),
       player(new QMediaPlayer(this)),
-      desktopLyric(new DesktopLyricWidget(nullptr))
+      desktopLyric(new DesktopLyricWidget(nullptr)),
+      expandPlayingButton(new InteractiveButtonBase(this)),
+      playingPositionTimer(new QTimer(this))
 {
     ui->setupUi(this);
 
@@ -24,39 +26,83 @@ OrderPlayerWindow::OrderPlayerWindow(QWidget *parent)
     ui->listSongsListView->setItemDelegate(new NoFocusDelegate());
     ui->historySongsListView->setItemDelegate(new NoFocusDelegate());
 
-    QString vScrollBarSS("QScrollBar:vertical{"        //垂直滑块整体
-                         "background: transparent;"  //背景色
-                         "padding-top:0px;"    //上预留位置（放置向上箭头）
-                         "padding-bottom:0px;" //下预留位置（放置向下箭头）
-                         "padding-left:3px;"    //左预留位置（美观）
-                         "padding-right:3px;"   //右预留位置（美观）
-                         "border-left:1px solid #d7d7d7;}"//左分割线
-                         "QScrollBar::handle:vertical{"//滑块样式
-                         "background:#dbdbdb;"  //滑块颜色
-                         "border-radius:4px;"   //边角圆润
-                         "min-height:40px;}"    //滑块最小高度
-                         "QScrollBar::handle:vertical:hover{"//鼠标触及滑块样式
-                         "background:#d0d0d0;}" //滑块颜色
-                         "QScrollBar::add-line:vertical{"//向下箭头样式
-                         "background:transparent;}"
-                         "QScrollBar::sub-line:vertical{"//向上箭头样式
-                         "background:transparent;}");
-    QString hScrollBarSS("QScrollBar:horizontal{"
-                          "background:transparent;"
-                          "padding-top:3px;"
-                          "padding-bottom:3px;"
-                          "padding-left:0px;"
-                          "padding-right:0px;}"
-                          "QScrollBar::handle:horizontal{"
-                          "background:#dbdbdb;"
-                          "border-radius:2px;"
-                          "min-width:40px;}"
-                          "QScrollBar::handle:horizontal:hover{"
-                          "background:#d0d0d0;}"
-                          "QScrollBar::add-line:horizontal{"
-                          "background: transparent;}"
-                          "QScrollBar::sub-line:horizontal{"
-                          "background:transparent;}");
+    QString vScrollBarSS("QScrollBar:vertical"
+                         "{"
+                         "    width:7px;"
+                         "    background:rgba(128,128,128,0%);"
+                         "    margin:0px,0px,0px,0px;"
+                         "    padding-top:0px;"
+                         "    padding-bottom:0px;"
+                         "}"
+                         "QScrollBar::handle:vertical"
+                         "{"
+                         "    width:7px;"
+                         "    background:rgba(128,128,128,32%);"
+                         "    border-radius:3px;"
+                         "    min-height:20;"
+                         "}"
+                         "QScrollBar::handle:vertical:hover"
+                         "{"
+                         "    width:7px;"
+                         "    background:rgba(128,128,128,50%);"
+                         "    min-height:20;"
+                         "}"
+                         "QScrollBar::sub-line:vertical"
+                         "{"
+                         "    height:9px;width:8px;"
+                         "    border-image:url(:/images/a/1.png);"
+                         "    subcontrol-position:top;"
+                         "}"
+                         "QScrollBar::add-line:vertical"
+                         "{"
+                         "    height:9px;width:8px;"
+                         "    border-image:url(:/images/a/3.png);"
+                         "    subcontrol-position:bottom;"
+                         "}"
+                         "QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical"
+                         "{"
+                         "    background:rgba(0,0,0,0%);"
+                         "    border-radius:3px;"
+                         "}");
+
+    QString hScrollBarSS("QScrollBar:horizontal"
+                         "{"
+                         "    height:7px;"
+                         "    background:rgba(128,128,128,0%);"
+                         "    margin:0px,0px,0px,0px;"
+                         "    padding-left:0px;"
+                         "    padding-right:0px;"
+                         "}"
+                         "QScrollBar::handle:horizontal"
+                         "{"
+                         "    height:7px;"
+                         "    background:rgba(128,128,128,32%);"
+                         "    border-radius:3px;"
+                         "    min-width:20;"
+                         "}"
+                         "QScrollBar::handle:horizontal:hover"
+                         "{"
+                         "    height:7px;"
+                         "    background:rgba(128,128,128,50%);"
+                         "    min-width:20;"
+                         "}"
+                         "QScrollBar::sub-line:horizontal"
+                         "{"
+                         "    width:9px;height:8px;"
+                         "    border-image:url(:/images/a/1.png);"
+                         "    subcontrol-position:top;"
+                         "}"
+                         "QScrollBar::add-line:horizontal"
+                         "{"
+                         "    width:9px;height:8px;"
+                         "    border-image:url(:/images/a/3.png);"
+                         "    subcontrol-position:bottom;"
+                         "}"
+                         "QScrollBar::add-page:horizontal,QScrollBar::sub-page:horizontal"
+                         "{"
+                         "    background:rgba(0,0,0,0%);"
+                         "    border-radius:3px;"
+                         "}");
     ui->orderSongsListView->verticalScrollBar()->setStyleSheet(vScrollBarSS);
     ui->orderSongsListView->horizontalScrollBar()->setStyleSheet(hScrollBarSS);
     ui->favoriteSongsListView->verticalScrollBar()->setStyleSheet(vScrollBarSS);
@@ -65,13 +111,21 @@ OrderPlayerWindow::OrderPlayerWindow(QWidget *parent)
     ui->normalSongsListView->horizontalScrollBar()->setStyleSheet(hScrollBarSS);
     ui->historySongsListView->verticalScrollBar()->setStyleSheet(vScrollBarSS);
     ui->historySongsListView->horizontalScrollBar()->setStyleSheet(hScrollBarSS);
-    ui->listTabWidget->removeTab(3); // TOOD: 歌单部分没做好，先隐藏
+    ui->scrollArea->verticalScrollBar()->setStyleSheet(vScrollBarSS);
+    ui->searchResultTable->verticalScrollBar()->setStyleSheet(vScrollBarSS);
+    ui->searchResultTable->horizontalScrollBar()->setStyleSheet(hScrollBarSS);
+    ui->listTabWidget->removeTab(LISTTAB_PLAYLIST); // TOOD: 歌单部分没做好，先隐藏
+    ui->titleButton->setText(settings.value("music/title", "Lazy点歌姬").toString());
+
+    QPalette pa;
+    pa.setColor(QPalette::Highlight, QColor(100, 149, 237, 88));
+    QApplication::setPalette(pa);
+
     connect(ui->searchResultTable->horizontalHeader(), SIGNAL(sectionClicked(int)), this, SLOT(sortSearchResult(int)));
 
     connect(player, &QMediaPlayer::positionChanged, this, [=](qint64 position){
-        ui->playProgressSlider->setSliderPosition(static_cast<int>(position));
         ui->playingCurrentTimeLabel->setText(msecondToString(position));
-        desktopLyric->setPosition(position);
+        slotPlayerPositionChanged();
     });
     connect(player, &QMediaPlayer::durationChanged, this, [=](qint64 duration){
         ui->playProgressSlider->setMaximum(static_cast<int>(duration));
@@ -95,18 +149,30 @@ OrderPlayerWindow::OrderPlayerWindow(QWidget *parent)
     connect(player, &QMediaPlayer::stateChanged, this, [=](QMediaPlayer::State state){
         if (state == QMediaPlayer::PlayingState)
         {
+            playingPositionTimer->start();
             ui->playButton->setIcon(QIcon(":/icons/pause"));
         }
         else
         {
+            playingPositionTimer->stop();
             ui->playButton->setIcon(QIcon(":/icons/play"));
         }
     });
+
+    connect(ui->lyricWidget, SIGNAL(signalAdjustLyricTime(QString)), this, SLOT(adjustCurrentLyricTime(QString)));
 
     musicsFileDir.mkpath(musicsFileDir.absolutePath());
     QTime time;
     time= QTime::currentTime();
     qsrand(time.msec()+time.second()*1000);
+
+    bool lyricStack = settings.value("music/lyricStream", false).toBool();
+    if (lyricStack)
+        ui->bodyStackWidget->setCurrentWidget(ui->lyricsPage);
+
+    blurBg = settings.value("music/blurBg", blurBg).toBool();
+    blurAlpha = settings.value("music/blurAlpha", blurAlpha).toInt();
+    themeColor = settings.value("music/themeColor", themeColor).toBool();
 
     // 读取数据
     ui->listTabWidget->setCurrentIndex(settings.value("orderplayerwindow/tabIndex").toInt());
@@ -136,10 +202,8 @@ OrderPlayerWindow::OrderPlayerWindow(QWidget *parent)
     else
         ui->circleModeButton->setIcon(QIcon(":/icons/single_circle"));
 
-    connect(desktopLyric, &DesktopLyricWidget::signalhide, this, [=]{
-        ui->desktopLyricButton->setIcon(QIcon(":/icons/lyric_hide"));
-        settings.setValue("music/desktopLyric", false);
-    });
+    connectDesktopLyricSignals();
+
     bool showDesktopLyric = settings.value("music/desktopLyric", false).toBool();
     if (showDesktopLyric)
     {
@@ -156,21 +220,32 @@ OrderPlayerWindow::OrderPlayerWindow(QWidget *parent)
     Song currentSong = Song::fromJson(settings.value("music/currentSong").toJsonObject());
     if (currentSong.isValid())
     {
-        startPlaySong(currentSong);
+        startPlaySong(currentSong);// 还原位置
 
-        // 不自动播放
-        player->stop();
-
-        // 还原位置
         qint64 playPosition = settings.value("music/playPosition", 0).toLongLong();
         if (playPosition)
         {
             setPlayPositionAfterLoad = playPosition;
+            slotPlayerPositionChanged();
         }
+
+        // 不自动播放
+        player->stop();
     }
     settings.setValue("music/playPosition", 0);
 
-    searchMusic("司夏");
+    connect(expandPlayingButton, SIGNAL(clicked()), this, SLOT(slotExpandPlayingButtonClicked()));
+    expandPlayingButton->show();
+
+    // searchMusic("司夏"); // 测试用的
+
+    prevBlurBg = QPixmap(32, 32);
+    prevBlurBg.fill(QColor(245, 245, 247));
+    playingPositionTimer->setInterval(100);
+    connect(playingPositionTimer, &QTimer::timeout, this, [=]{
+        if (player->state() == QMediaPlayer::PlayingState)
+            slotPlayerPositionChanged();
+    });
 }
 
 OrderPlayerWindow::~OrderPlayerWindow()
@@ -179,10 +254,21 @@ OrderPlayerWindow::~OrderPlayerWindow()
     desktopLyric->deleteLater();
 }
 
+bool OrderPlayerWindow::hasSongInOrder(QString by)
+{
+    foreach (Song song, orderSongs)
+    {
+        if (song.addBy == by)
+            return true;
+    }
+    return false;
+}
+
 void OrderPlayerWindow::on_searchEdit_returnPressed()
 {
     QString text = ui->searchEdit->text();
     searchMusic(text);
+    ui->bodyStackWidget->setCurrentWidget(ui->searchResultPage);
 }
 
 void OrderPlayerWindow::on_searchButton_clicked()
@@ -193,10 +279,10 @@ void OrderPlayerWindow::on_searchButton_clicked()
 /**
  * 点歌并且添加到末尾
  */
-void OrderPlayerWindow::slotSearchAndAutoAppend(QString key)
+void OrderPlayerWindow::slotSearchAndAutoAppend(QString key, QString by)
 {
     ui->searchEdit->setText(key);
-    searchAndAppend = true;
+    orderBys.append(by);
     searchMusic(key);
 }
 
@@ -237,12 +323,26 @@ void OrderPlayerWindow::searchMusic(QString key)
 
         setSearchResultTable(searchResultSongs);
 
-        // 点歌自动添加
-        if (searchAndAppend)
+        // 从点歌的槽进来的
+        if (orderBys.size())
         {
-            searchAndAppend = false;
+            QString by = orderBys.takeFirst();
+            Song song = searchResultSongs.first();
+            song.setAddDesc(by);
+
+            // 添加到点歌列表
             if (searchResultSongs.size())
-                appendOrderSongs(SongList{searchResultSongs.first()});
+                appendOrderSongs(SongList{song});
+
+            // 发送点歌成功的信号
+            qint64 sumLatency = isNotPlaying() ? 0 : player->duration() - player->position();
+            for (int i = 0; i < orderSongs.size()-1; i++)
+            {
+                if (orderSongs.at(i).id == song.id) // 同一首歌，如果全都不同，那就是下一首
+                    break;
+                sumLatency += orderSongs.at(i).duration;
+            }
+            emit signalOrderSongSucceed(song, sumLatency);
         }
     });
     manager->get(*request);
@@ -263,9 +363,9 @@ void OrderPlayerWindow::setSearchResultTable(SongList songs)
         albumCol,
         durationCol
     };
+    table->setColumnCount(4);
     QStringList headers{"标题", "艺术家", "专辑", "时长"};
     table->setHorizontalHeaderLabels(headers);
-    table->setColumnCount(4);
 
     QFontMetrics fm(font());
     int fw = fm.horizontalAdvance("哈哈哈哈哈哈哈哈哈哈哈哈哈哈哈哈");
@@ -301,6 +401,7 @@ void OrderPlayerWindow::setSearchResultTable(PlayListList playLists)
 
 void OrderPlayerWindow::addFavorite(SongList songs)
 {
+    QPoint center = ui->listTabWidget->tabBar()->tabRect(LISTTAB_FAVORITE).center();
     foreach (auto song, songs)
     {
         if (favoriteSongs.contains(song))
@@ -309,6 +410,7 @@ void OrderPlayerWindow::addFavorite(SongList songs)
             continue;
         }
         favoriteSongs.append(song);
+        showTabAnimation(center, "+1");
         qDebug() << "添加收藏：" << song.simpleString();
     }
     saveSongList("music/favorite", favoriteSongs);
@@ -317,13 +419,57 @@ void OrderPlayerWindow::addFavorite(SongList songs)
 
 void OrderPlayerWindow::removeFavorite(SongList songs)
 {
+    QPoint center = ui->listTabWidget->tabBar()->tabRect(LISTTAB_FAVORITE).center();
     foreach (Song song, songs)
     {
-        favoriteSongs.removeOne(song);
-        qDebug() << "取消收藏：" << song.simpleString();
+        if (favoriteSongs.removeOne(song))
+        {
+            showTabAnimation(center, "-1");
+            qDebug() << "取消收藏：" << song.simpleString();
+        }
     }
     saveSongList("music/favorite", favoriteSongs);
     setSongModelToView(favoriteSongs, ui->favoriteSongsListView);
+}
+
+void OrderPlayerWindow::addNormal(SongList songs)
+{
+    QPoint center = ui->listTabWidget->tabBar()->tabRect(LISTTAB_NORMAL).center();
+    foreach (Song song, songs)
+    {
+        normalSongs.removeOne(song);
+    }
+    for (int i = songs.size()-1; i >= 0; i--)
+    {
+        normalSongs.insert(0, songs.at(i));
+        showTabAnimation(center, "+1");
+    }
+    saveSongList("music/normal", normalSongs);
+    setSongModelToView(normalSongs, ui->normalSongsListView);
+}
+
+void OrderPlayerWindow::removeNormal(SongList songs)
+{
+    QPoint center = ui->listTabWidget->tabBar()->tabRect(LISTTAB_NORMAL).center();
+    foreach (Song song, songs)
+    {
+        if (normalSongs.removeOne(song))
+            showTabAnimation(center, "-1");
+    }
+    saveSongList("music/normal", normalSongs);
+    setSongModelToView(normalSongs, ui->normalSongsListView);
+}
+
+void OrderPlayerWindow::removeOrder(SongList songs)
+{
+    QPoint center = ui->listTabWidget->tabBar()->tabRect(LISTTAB_ORDER).center();
+    foreach (Song song, songs)
+    {
+        if (orderSongs.removeOne(song))
+            showTabAnimation(center, "-1");
+    }
+    saveSongList("music/order", orderSongs);
+    setSongModelToView(orderSongs, ui->orderSongsListView);
 }
 
 void OrderPlayerWindow::saveSongList(QString key, const SongList &songs)
@@ -408,13 +554,109 @@ void OrderPlayerWindow::showEvent(QShowEvent *)
 {
     restoreGeometry(settings.value("orderplayerwindow/geometry").toByteArray());
     restoreState(settings.value("orderplayerwindow/state").toByteArray());
+    ui->splitter->restoreState(settings.value("orderplayerwindow/splitterState").toByteArray());
+    auto sizes = ui->splitter->sizes();
+    if (sizes.at(0)+1 >= sizes.at(1))
+    {
+        int sum = sizes.at(0) + sizes.at(1);
+        int w = sum / 3;
+        ui->splitter->setSizes(QList<int>{w, sum - w});
+    }
+
+    adjustExpandPlayingButton();
+
+    if (settings.value("music/desktopLyric", false).toBool())
+        desktopLyric->show();
 }
 
 void OrderPlayerWindow::closeEvent(QCloseEvent *)
 {
     settings.setValue("orderplayerwindow/geometry", this->saveGeometry());
     settings.setValue("orderplayerwindow/state", this->saveState());
+    settings.setValue("orderplayerwindow/splitterState", ui->splitter->saveState());
     settings.setValue("music/playPosition", player->position());
+
+    if (player->state() == QMediaPlayer::PlayingState)
+        player->pause();
+
+    // 保存位置
+    if (!desktopLyric->isHidden())
+        desktopLyric->close();
+}
+
+void OrderPlayerWindow::resizeEvent(QResizeEvent *)
+{
+    adjustExpandPlayingButton();
+    // setBlurBackground(currentCover); // 太消耗性能了
+}
+
+void OrderPlayerWindow::paintEvent(QPaintEvent *e)
+{
+    QMainWindow::paintEvent(e);
+
+    if (blurBg)
+    {
+        QPainter painter(this);
+        if (!currentBlurBg.isNull())
+        {
+            painter.setOpacity((double)currentBgAlpha / 255);
+            painter.drawPixmap(rect(), currentBlurBg);
+        }
+        if (!prevBlurBg.isNull() && prevBgAlpha)
+        {
+            painter.setOpacity((double)prevBgAlpha / 255);
+            painter.drawPixmap(rect(), prevBlurBg);
+        }
+    }
+}
+
+void OrderPlayerWindow::setLyricScroll(int x)
+{
+    this->lyricScroll = x;
+}
+
+int OrderPlayerWindow::getLyricScroll() const
+{
+    return this->lyricScroll;
+}
+
+void OrderPlayerWindow::setAppearBgProg(int x)
+{
+    this->currentBgAlpha = x;
+}
+
+int OrderPlayerWindow::getAppearBgProg() const
+{
+    return this->currentBgAlpha;
+}
+
+void OrderPlayerWindow::setDisappearBgProg(int x)
+{
+    this->prevBgAlpha = x;
+}
+
+int OrderPlayerWindow::getDisappearBgProg() const
+{
+    return this->prevBgAlpha;
+}
+
+void OrderPlayerWindow::showTabAnimation(QPoint center, QString text)
+{
+    center = ui->listTabWidget->mapTo(this, center);
+    QColor color = QColor::fromHsl(rand()%360,rand()%256,rand()%200); // 深色的颜色
+    NumberAnimation *animation = new NumberAnimation(text, color, this);
+    animation->setCenter(center + QPoint(rand() % 32 - 16, rand() % 32 - 16));
+    animation->startAnimation();
+}
+
+void OrderPlayerWindow::setPaletteBgProg(double x)
+{
+    this->paletteAlpha = x;
+}
+
+double OrderPlayerWindow::getPaletteBgProg() const
+{
+    return paletteAlpha;
 }
 
 /**
@@ -472,16 +714,7 @@ void OrderPlayerWindow::on_searchResultTable_customContextMenuRequested(const QP
         })->disable(!currentSong.isValid());
 
         menu->addAction("添加常时播放", [=]{
-            foreach (Song song, songs)
-            {
-                normalSongs.removeOne(song);
-            }
-            for (int i = songs.size()-1; i >= 0; i--)
-            {
-                normalSongs.insert(0, songs.at(i));
-            }
-            saveSongList("music/normal", normalSongs);
-            setSongModelToView(normalSongs, ui->normalSongsListView);
+            addNormal(songs);
         })->disable(!currentSong.isValid());
 
         menu->split()->addAction("收藏", [=]{
@@ -555,6 +788,7 @@ void OrderPlayerWindow::playNext()
     setSongModelToView(orderSongs, ui->orderSongsListView);
 
     startPlaySong(song);
+    emit signalOrderSongPlayed(song);
 }
 
 /**
@@ -562,12 +796,14 @@ void OrderPlayerWindow::playNext()
  */
 void OrderPlayerWindow::appendOrderSongs(SongList songs)
 {
+    QPoint center = ui->listTabWidget->tabBar()->tabRect(LISTTAB_ORDER).center();
     foreach (Song song, songs)
     {
         if (orderSongs.contains(song))
             continue;
         orderSongs.append(song);
         addDownloadSong(song);
+        showTabAnimation(center, "+1");
     }
     saveSongList("music/order", orderSongs);
     setSongModelToView(orderSongs, ui->orderSongsListView);
@@ -587,12 +823,14 @@ void OrderPlayerWindow::appendOrderSongs(SongList songs)
  */
 void OrderPlayerWindow::appendNextSongs(SongList songs)
 {
+    QPoint center = ui->listTabWidget->tabBar()->tabRect(LISTTAB_ORDER).center();
     foreach (Song song, songs)
     {
         if (orderSongs.contains(song))
             orderSongs.removeOne(song);
         orderSongs.insert(0, song);
         addDownloadSong(song);
+        showTabAnimation(center, "+1");
     }
     saveSongList("music/order", orderSongs);
     setSongModelToView(orderSongs, ui->orderSongsListView);
@@ -621,8 +859,13 @@ void OrderPlayerWindow::playLocalSong(Song song)
     }
 
     // 设置信息
-    ui->playingNameLabel->setText(song.name);
-    ui->playingArtistLabel->setText(song.artistNames);
+    auto max16 = [=](QString s){
+        if (s.length() > 16)
+            s = s.left(15) + "...";
+        return s;
+    };
+    ui->playingNameLabel->setText(max16(song.name));
+    ui->playingArtistLabel->setText(max16(song.artistNames));
     ui->playingAllTimeLabel->setText(msecondToString(song.duration));
     // 设置封面
     if (QFileInfo(coverPath(song)).exists())
@@ -632,6 +875,7 @@ void OrderPlayerWindow::playLocalSong(Song song)
             qDebug() << "warning: 本地封面是空的" << song.simpleString() << coverPath(song);
         pixmap = pixmap.scaledToHeight(ui->playingCoverLabel->height());
         ui->playingCoverLabel->setPixmap(pixmap);
+        setCurrentCover(pixmap);
     }
     else
     {
@@ -656,6 +900,7 @@ void OrderPlayerWindow::playLocalSong(Song song)
     }
     else
     {
+        setCurrentLyric("");
         downloadSongLyric(song);
     }
 
@@ -665,6 +910,7 @@ void OrderPlayerWindow::playLocalSong(Song song)
     player->setPosition(0);
     player->play();
     emit signalSongPlayStarted(song);
+    setWindowTitle(song.name);
 
     // 添加到历史记录
     historySongs.removeOne(song);
@@ -830,6 +1076,7 @@ void OrderPlayerWindow::downloadSongLyric(Song song)
             file.flush();
             file.close();
 
+            qDebug() << "下载歌词完成：" << song.simpleString();
             if (playAfterDownloaded == song || playingSong == song)
             {
                 setCurrentLyric(lrc);
@@ -905,10 +1152,12 @@ void OrderPlayerWindow::downloadSongCover(Song song)
 
             emit signalCoverDownloadFinished(song);
 
+            // 正是当前要播放的歌曲
             if (playAfterDownloaded == song || playingSong == song)
             {
                 pixmap = pixmap.scaledToHeight(ui->playingCoverLabel->height());
                 ui->playingCoverLabel->setPixmap(pixmap);
+                setCurrentCover(pixmap);
             }
         }
         else
@@ -925,6 +1174,189 @@ void OrderPlayerWindow::downloadSongCover(Song song)
 void OrderPlayerWindow::setCurrentLyric(QString lyric)
 {
     desktopLyric->setLyric(lyric);
+    ui->lyricWidget->setLyric(lyric);
+}
+
+void OrderPlayerWindow::adjustExpandPlayingButton()
+{
+    QRect rect(ui->playingCoverLabel->mapTo(this, QPoint(0,0)), QSize(ui->listTabWidget->width(), ui->playingCoverLabel->height()));
+    expandPlayingButton->setGeometry(rect);
+    expandPlayingButton->raise();
+}
+
+void OrderPlayerWindow::connectDesktopLyricSignals()
+{
+    connect(desktopLyric, &DesktopLyricWidget::signalhide, this, [=]{
+        ui->desktopLyricButton->setIcon(QIcon(":/icons/lyric_hide"));
+        settings.setValue("music/desktopLyric", false);
+    });
+    connect(desktopLyric, &DesktopLyricWidget::signalSwitchTrans, this, [=]{
+        desktopLyric->close();
+        desktopLyric->deleteLater();
+
+        desktopLyric = new DesktopLyricWidget(nullptr);
+        connectDesktopLyricSignals();
+        desktopLyric->show();
+
+        if (playingSong.isValid())
+        {
+            Song song = playingSong;
+            if (QFileInfo(lyricPath(song)).exists())
+            {
+                QFile file(lyricPath(song));
+                file.open(QIODevice::ReadOnly | QIODevice::Text);
+                QTextStream stream(&file);
+                QString lyric;
+                QString line;
+                while (!stream.atEnd())
+                {
+                    line = stream.readLine();
+                    lyric.append(line+"\n");
+                }
+                file.close();
+
+                desktopLyric->setLyric(lyric);
+                desktopLyric->setPosition(player->position());
+            }
+        }
+    });
+}
+
+void OrderPlayerWindow::setCurrentCover(const QPixmap &pixmap)
+{
+    currentCover = pixmap;
+    if (themeColor)
+        setThemeColor(currentCover);
+    if (blurBg)
+        setBlurBackground(currentCover);
+}
+
+void OrderPlayerWindow::setBlurBackground(const QPixmap &bg)
+{
+    if (bg.isNull())
+        return ;
+
+    // 当前图片变为上一张图
+    prevBgAlpha = currentBgAlpha;
+    prevBlurBg = currentBlurBg;
+
+    // 开始模糊
+    const int radius = qMax(20, qMin(width(), height())/5);
+    QPixmap pixmap = bg;
+    pixmap = pixmap.scaled(this->width()+radius*2, this->height() + radius*2, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    QImage img = pixmap.toImage(); // img -blur-> painter(pixmap)
+    QPainter painter( &pixmap );
+    qt_blurImage( &painter, img, radius, true, false );
+
+    // 裁剪掉边缘（模糊后会有黑边）
+    int c = qMin(bg.width(), bg.height());
+    c = qMin(c/2, radius);
+    QPixmap clip = pixmap.copy(c, c, pixmap.width()-c*2, pixmap.height()-c*2);
+
+    // 抽样获取背景，设置之后的透明度
+    qint64 rgbSum = 0;
+    QImage image = clip.toImage();
+    int w = image.width(), h = image.height();
+    const int m = 16;
+    for (int y = 0; y < m; y++)
+    {
+        for (int x = 0; x < m; x++)
+        {
+            QColor c = image.pixelColor(w*x/m, h*x/m);
+            rgbSum += c.red() + c.green() + c.blue();
+        }
+    }
+    int addin = rgbSum * blurAlpha / (255*3*m*m);
+
+    // 半透明
+    currentBlurBg = clip;
+    currentBgAlpha = qMin(255, blurAlpha + addin);
+
+    // 出现动画
+    QPropertyAnimation* ani1 = new QPropertyAnimation(this, "appearBgProg");
+    ani1->setStartValue(0);
+    ani1->setEndValue(currentBgAlpha);
+    ani1->setDuration(1000);
+    ani1->setEasingCurve(QEasingCurve::OutCubic);
+    connect(ani1, &QPropertyAnimation::valueChanged, this, [=](const QVariant& val){
+        update();
+    });
+    connect(ani1, &QPropertyAnimation::finished, this, [=]{
+        ani1->deleteLater();
+    });
+    currentBgAlpha = 0;
+    ani1->start();
+
+    // 消失动画
+    QPropertyAnimation* ani2 = new QPropertyAnimation(this, "disappearBgProg");
+    ani2->setStartValue(prevBgAlpha);
+    ani2->setEndValue(0);
+    ani2->setDuration(1000);
+    ani2->setEasingCurve(QEasingCurve::OutCubic);
+    connect(ani2, &QPropertyAnimation::valueChanged, this, [=](const QVariant& val){
+        prevBgAlpha = val.toInt();
+        update();
+    });
+    connect(ani2, &QPropertyAnimation::finished, this, [=]{
+        prevBlurBg = QPixmap();
+        ani2->deleteLater();
+        update();
+    });
+    ani2->start();
+}
+
+void OrderPlayerWindow::setThemeColor(const QPixmap &cover)
+{
+    QColor bg, fg, sbg, sfg;
+    auto colors = ImageUtil::extractImageThemeColors(cover.toImage(), 7);
+    ImageUtil::getBgFgSgColor(colors, &bg, &fg, &sbg, &sfg);
+
+    prevPa = BFSColor::fromPalette(palette());
+    currentPa = BFSColor(QList<QColor>{bg, fg,sbg, sfg});
+
+    QPropertyAnimation* ani = new QPropertyAnimation(this, "paletteProg");
+    ani->setStartValue(0);
+    ani->setEndValue(1.0);
+    ani->setDuration(500);
+    connect(ani, &QPropertyAnimation::valueChanged, this, [=](const QVariant& val){
+        double d = val.toDouble();
+        BFSColor bfs = prevPa + (currentPa - prevPa) * d;
+        QColor bg, fg, sbg, sfg;
+        bfs.toColors(&bg, &fg, &sbg, &sfg);
+
+        QPalette pa;
+        pa.setColor(QPalette::Window, bg);
+        pa.setColor(QPalette::Background, bg);
+        pa.setColor(QPalette::Button, bg);
+
+        pa.setColor(QPalette::Foreground, fg);
+        pa.setColor(QPalette::Text, fg);
+        pa.setColor(QPalette::ButtonText, fg);
+        pa.setColor(QPalette::WindowText, fg);
+        pa.setColor(QPalette::HighlightedText, fg);
+
+        pa.setColor(QPalette::Highlight, sbg);
+
+        QApplication::setPalette(pa);
+        setPalette(pa);
+
+        ui->lyricWidget->setColors(sfg, fg);
+        desktopLyric->setColors(sfg, fg);
+        ui->playingNameLabel->setPalette(pa);
+        ui->titleButton->setPalette(pa);
+    });
+    connect(ani, SIGNAL(finished()), ani, SLOT(deleteLater()));
+    ani->start();
+
+    // 菜单直接切换，不进行动画
+    QColor halfSg = sfg;
+    halfSg.setAlpha(halfSg.alpha() / 2);
+    FacileMenu::normal_bg = bg;
+    FacileMenu::hover_bg = halfSg;
+    FacileMenu::press_bg = sfg;
+    FacileMenu::text_fg = fg;
+
+    qDebug() << "当前颜色：" << bg << fg << sfg;
 }
 
 /**
@@ -949,6 +1381,14 @@ void OrderPlayerWindow::sortSearchResult(int col)
 void OrderPlayerWindow::on_playProgressSlider_sliderReleased()
 {
     int position = ui->playProgressSlider->sliderPosition();
+    player->setPosition(position);
+}
+
+/**
+ * 播放进度条被拖动
+ */
+void OrderPlayerWindow::on_playProgressSlider_sliderMoved(int position)
+{
     player->setPosition(position);
 }
 
@@ -1083,7 +1523,7 @@ void OrderPlayerWindow::on_orderSongsListView_customContextMenuRequested(const Q
         setSongModelToView(orderSongs, ui->orderSongsListView);
     })->disable(!songs.size());
 
-    menu->addAction("添加常时播放", [=]{
+    menu->split()->addAction("添加常时播放", [=]{
         foreach (Song song, songs)
         {
             normalSongs.removeOne(song);
@@ -1095,6 +1535,14 @@ void OrderPlayerWindow::on_orderSongsListView_customContextMenuRequested(const Q
         saveSongList("music/normal", normalSongs);
         setSongModelToView(normalSongs, ui->normalSongsListView);
     })->disable(!currentSong.isValid());
+
+    menu->addAction("收藏", [=]{
+        if (!favoriteSongs.contains(currentSong))
+            addFavorite(songs);
+        else
+            removeFavorite(songs);
+    })->disable(!currentSong.isValid())
+            ->text(favoriteSongs.contains(currentSong), "从收藏中移除", "添加到收藏");
 
     menu->split()->addAction("上移", [=]{
         orderSongs.swapItemsAt(row, row-1);
@@ -1109,12 +1557,7 @@ void OrderPlayerWindow::on_orderSongsListView_customContextMenuRequested(const Q
     })->disable(songs.size() != 1 || row >= orderSongs.size()-1);
 
     menu->split()->addAction("删除", [=]{
-        foreach (Song song, songs)
-        {
-            orderSongs.removeOne(song);
-        }
-        saveSongList("music/order", orderSongs);
-        setSongModelToView(orderSongs, ui->orderSongsListView);
+        removeOrder(songs);
     })->disable(!songs.size());
 
     menu->exec();
@@ -1138,7 +1581,7 @@ void OrderPlayerWindow::on_favoriteSongsListView_customContextMenuRequested(cons
         startPlaySong(song);
     })->disable(songs.size() != 1 || !currentSong.isValid());
 
-    menu->addAction("下一首播放", [=]{
+    menu->split()->addAction("下一首播放", [=]{
         appendNextSongs(songs);
     })->disable(!songs.size());
 
@@ -1147,16 +1590,7 @@ void OrderPlayerWindow::on_favoriteSongsListView_customContextMenuRequested(cons
     })->disable(!songs.size());
 
     menu->addAction("添加常时播放", [=]{
-        foreach (Song song, songs)
-        {
-            normalSongs.removeOne(song);
-        }
-        for (int i = songs.size()-1; i >= 0; i--)
-        {
-            normalSongs.insert(0, songs.at(i));
-        }
-        saveSongList("music/normal", normalSongs);
-        setSongModelToView(normalSongs, ui->normalSongsListView);
+        addNormal(songs);
     })->disable(!currentSong.isValid());
 
     menu->split()->addAction("上移", [=]{
@@ -1172,12 +1606,7 @@ void OrderPlayerWindow::on_favoriteSongsListView_customContextMenuRequested(cons
     })->disable(songs.size() != 1 || row >= favoriteSongs.size()-1);
 
     menu->split()->addAction("移出收藏", [=]{
-        foreach (Song song, songs)
-        {
-            favoriteSongs.removeOne(song);
-        }
-        saveSongList("music/favorite", favoriteSongs);
-        setSongModelToView(favoriteSongs, ui->favoriteSongsListView);
+        removeFavorite(songs);
     })->disable(!songs.size());
 
     menu->exec();
@@ -1226,13 +1655,21 @@ void OrderPlayerWindow::on_normalSongsListView_customContextMenuRequested(const 
         startPlaySong(song);
     })->disable(songs.size() != 1 || !currentSong.isValid());
 
-    menu->addAction("下一首播放", [=]{
+    menu->split()->addAction("下一首播放", [=]{
         appendNextSongs(songs);
     })->disable(!songs.size());
 
     menu->addAction("添加到播放列表", [=]{
         appendOrderSongs(songs);
     })->disable(!songs.size());
+
+    menu->addAction("收藏", [=]{
+        if (!favoriteSongs.contains(currentSong))
+            addFavorite(songs);
+        else
+            removeFavorite(songs);
+    })->disable(!currentSong.isValid())
+            ->text(favoriteSongs.contains(currentSong), "从收藏中移除", "添加到收藏");
 
     menu->split()->addAction("上移", [=]{
         normalSongs.swapItemsAt(row, row-1);
@@ -1247,12 +1684,7 @@ void OrderPlayerWindow::on_normalSongsListView_customContextMenuRequested(const 
     })->disable(songs.size() != 1 || row >= normalSongs.size()-1);
 
     menu->split()->addAction("移出常时播放", [=]{
-        foreach (Song song, songs)
-        {
-            normalSongs.removeOne(song);
-        }
-        saveSongList("music/normal", normalSongs);
-        setSongModelToView(normalSongs, ui->normalSongsListView);
+        removeNormal(songs);
     })->disable(!songs.size());
 
     menu->exec();
@@ -1276,7 +1708,7 @@ void OrderPlayerWindow::on_historySongsListView_customContextMenuRequested(const
         startPlaySong(song);
     })->disable(songs.size() != 1 || !currentSong.isValid());
 
-    menu->addAction("下一首播放", [=]{
+    menu->split()->addAction("下一首播放", [=]{
         appendNextSongs(songs);
     })->disable(!songs.size());
 
@@ -1285,19 +1717,18 @@ void OrderPlayerWindow::on_historySongsListView_customContextMenuRequested(const
     })->disable(!songs.size());
 
     menu->addAction("添加常时播放", [=]{
-        foreach (Song song, songs)
-        {
-            normalSongs.removeOne(song);
-        }
-        for (int i = songs.size()-1; i >= 0; i--)
-        {
-            normalSongs.insert(0, songs.at(i));
-        }
-        saveSongList("music/normal", normalSongs);
-        setSongModelToView(normalSongs, ui->normalSongsListView);
+        addNormal(songs);
     })->disable(!currentSong.isValid());
 
-    menu->addAction("清理下载文件", [=]{
+    menu->addAction("收藏", [=]{
+        if (!favoriteSongs.contains(currentSong))
+            addFavorite(songs);
+        else
+            removeFavorite(songs);
+    })->disable(!currentSong.isValid())
+            ->text(favoriteSongs.contains(currentSong), "从收藏中移除", "添加到收藏");
+
+    menu->split()->addAction("清理下载文件", [=]{
         foreach (Song song, songs)
         {
             QString path = songPath(song);
@@ -1311,12 +1742,14 @@ void OrderPlayerWindow::on_historySongsListView_customContextMenuRequested(const
                 QFile(path).remove();
 
         }
-    });
+    })->disable(!currentSong.isValid());
 
     menu->addAction("删除记录", [=]{
+        QPoint center = ui->listTabWidget->tabBar()->tabRect(LISTTAB_HISTORY).center();
         foreach (Song song, songs)
         {
-            historySongs.removeOne(song);
+            if (historySongs.removeOne(song))
+                showTabAnimation(center, "+1");
         }
         saveSongList("music/history", historySongs);
         setSongModelToView(historySongs, ui->historySongsListView);
@@ -1364,4 +1797,140 @@ void OrderPlayerWindow::on_desktopLyricButton_clicked()
         desktopLyric->hide();
         ui->desktopLyricButton->setIcon(QIcon(":/icons/lyric_hide"));
     }
+}
+
+void OrderPlayerWindow::slotExpandPlayingButtonClicked()
+{
+    if (ui->bodyStackWidget->currentWidget() == ui->lyricsPage) // 隐藏歌词
+    {
+        QRect rect(ui->bodyStackWidget->mapTo(this, QPoint(5, 0)), ui->bodyStackWidget->size()-QSize(5, 0));
+        QPixmap pixmap(rect.size());
+        render(&pixmap, QPoint(0, 0), rect);
+        QLabel* label = new QLabel(this);
+        label->setScaledContents(true);
+        label->setGeometry(rect);
+        label->setPixmap(pixmap);
+        QPropertyAnimation* ani = new QPropertyAnimation(label, "geometry");
+        ani->setStartValue(rect);
+        ani->setEndValue(QRect(ui->playingCoverLabel->geometry().center(), QSize(1,1)));
+        ani->setEasingCurve(QEasingCurve::InOutCubic);
+        ani->setDuration(300);
+        connect(ani, &QPropertyAnimation::finished, this, [=]{
+            ani->deleteLater();
+            label->deleteLater();
+        });
+        label->show();
+        ani->start();
+        ui->bodyStackWidget->setCurrentWidget(ui->searchResultPage);
+        settings.setValue("music/lyricStream", false);
+    }
+    else // 显示歌词
+    {
+        ui->bodyStackWidget->setCurrentWidget(ui->lyricsPage);
+        QRect rect(ui->bodyStackWidget->mapTo(this, QPoint(5, 0)), ui->bodyStackWidget->size()-QSize(5, 0));
+        QPixmap pixmap(rect.size());
+        render(&pixmap, QPoint(0, 0), rect);
+        QLabel* label = new QLabel(this);
+        label->setScaledContents(true);
+        label->setGeometry(rect);
+        label->setPixmap(pixmap);
+        QPropertyAnimation* ani = new QPropertyAnimation(label, "geometry");
+        ani->setStartValue(QRect(ui->playingCoverLabel->geometry().center(), QSize(1,1)));
+        ani->setEndValue(rect);
+        ani->setDuration(300);
+        ani->setEasingCurve(QEasingCurve::InOutCubic);
+        connect(ani, &QPropertyAnimation::finished, this, [=]{
+            ui->bodyStackWidget->setCurrentWidget(ui->lyricsPage);
+            ani->deleteLater();
+            label->deleteLater();
+        });
+        label->show();
+        ani->start();
+        ui->bodyStackWidget->setCurrentWidget(ui->searchResultPage);
+        settings.setValue("music/lyricStream", true);
+    }
+}
+
+void OrderPlayerWindow::slotPlayerPositionChanged()
+{
+    qint64 position = player->position();
+    if (desktopLyric && !desktopLyric->isHidden())
+        desktopLyric->setPosition(position);
+    if (ui->lyricWidget->setPosition(position))
+    {
+        // 开始滚动
+        QPropertyAnimation* ani = new QPropertyAnimation(this, "lyricScroll");
+        ani->setStartValue(ui->scrollArea->verticalScrollBar()->sliderPosition());
+        ani->setEndValue(qMax(0, ui->lyricWidget->getCurrentTop() - this->height()/2));
+        ani->setDuration(200);
+        connect(ani, &QPropertyAnimation::valueChanged, this, [=]{
+            ui->scrollArea->verticalScrollBar()->setSliderPosition(lyricScroll);
+        });
+        connect(ani, SIGNAL(finished()), ani, SLOT(deleteLater()));
+        ani->start();
+    }
+    ui->playProgressSlider->setSliderPosition(static_cast<int>(position));
+    update();
+}
+
+void OrderPlayerWindow::on_splitter_splitterMoved(int pos, int index)
+{
+    adjustExpandPlayingButton();
+}
+
+void OrderPlayerWindow::on_titleButton_clicked()
+{
+    QString text = settings.value("music/title").toString();
+    bool ok;
+    QString rst = QInputDialog::getText(this, "请输入名称", "显示在左上角，不影响其他任何效果", QLineEdit::Normal, text, &ok);
+    if (!ok)
+        return ;
+    settings.setValue("music/title", rst);
+    ui->titleButton->setText(rst);
+}
+
+/**
+ * 调整当前歌词的时间
+ */
+void OrderPlayerWindow::adjustCurrentLyricTime(QString lyric)
+{
+    if (!playingSong.isValid())
+        return ;
+    QFile file(lyricPath(playingSong));
+    file.open(QIODevice::WriteOnly);
+    QTextStream stream(&file);
+    stream << lyric;
+    file.flush();
+    file.close();
+
+    // 调整桌面歌词
+    desktopLyric->setLyric(lyric);
+    desktopLyric->setPosition(player->position());
+}
+
+void OrderPlayerWindow::on_settingsButton_clicked()
+{
+    FacileMenu* menu = new FacileMenu(this);
+    menu->addAction("模糊背景", [=]{
+        settings.setValue("music/blurBg", blurBg = !blurBg);
+        if (blurBg)
+            setBlurBackground(currentCover);
+        update();
+    })->setChecked(blurBg);
+    QStringList sl{"32", "64", "96", "128"/*, "160", "192", "224", "256"*/};
+    auto blurAlphaMenu = menu->addMenu("模糊透明度");
+    menu->lastAction()->hide(!blurBg);
+    blurAlphaMenu->addOptions(sl, blurAlpha / 32 - 1, [=](int index){
+        blurAlpha = (index+1) * 32;
+        settings.setValue("music/blurAlpha", blurAlpha);
+        setBlurBackground(currentCover);
+    });
+    menu->split()->addAction("主题变色", [=]{
+        settings.setValue("music/themeColor", themeColor = !themeColor);
+        if (themeColor)
+            setThemeColor(currentCover);
+        update();
+    })->setChecked(themeColor);
+
+    menu->exec();
 }
