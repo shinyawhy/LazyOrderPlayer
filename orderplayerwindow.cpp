@@ -207,7 +207,6 @@ OrderPlayerWindow::OrderPlayerWindow(QWidget *parent)
     bool showDesktopLyric = settings.value("music/desktopLyric", false).toBool();
     if (showDesktopLyric)
     {
-        qDebug()<<"test";
         desktopLyric->show();
         ui->desktopLyricButton->setIcon(QIcon(":/icons/lyric_show"));
     }
@@ -354,6 +353,7 @@ void OrderPlayerWindow::searchMusic(QString key)
 void OrderPlayerWindow::setSearchResultTable(SongList songs)
 {
     QTableWidget* table = ui->searchResultTable;
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table->clear();
     searchResultPlayLists.clear();
 
@@ -366,6 +366,7 @@ void OrderPlayerWindow::setSearchResultTable(SongList songs)
     table->setColumnCount(4);
     QStringList headers{"标题", "艺术家", "专辑", "时长"};
     table->setHorizontalHeaderLabels(headers);
+
 
     QFontMetrics fm(font());
     int fw = fm.horizontalAdvance("哈哈哈哈哈哈哈哈哈哈哈哈哈哈哈哈");
@@ -389,6 +390,9 @@ void OrderPlayerWindow::setSearchResultTable(SongList songs)
         table->setItem(row, albumCol, createItem(song.album.name));
         table->setItem(row, durationCol, createItem(msecondToString(song.duration)));
     }
+    QTimer::singleShot(0, [=]{
+        table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    });
 }
 
 void OrderPlayerWindow::setSearchResultTable(PlayListList playLists)
